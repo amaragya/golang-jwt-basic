@@ -28,9 +28,11 @@ type MyClaims struct {
 }
 
 func main() {
+	// Initiate route and middleware
 	mux := new(CustomMux)
 	mux.RegisterMiddleware(MiddlewareJWTAuthorization)
 
+	//Routing
 	mux.HandleFunc("/login", HandlerLogin)
 	mux.HandleFunc("/index", HandlerIndex)
 
@@ -43,23 +45,21 @@ func main() {
 }
 
 func HandlerLogin(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
-		http.Error(w, "Unsupported http method", http.StatusBadRequest)
-		return
-	}
-
+	// Parsing username + password dari basic auth headers
 	username, password, ok := r.BasicAuth()
 	if !ok {
 		http.Error(w, "Invalid username or password", http.StatusBadRequest)
 		return
 	}
 
+	//Authenticate user yang dari username + password dengan data yang ada di users.json
 	ok, userInfo := authenticateUser(username, password)
 	if !ok {
 		http.Error(w, "Invalid username or password", http.StatusBadRequest)
 		return
 	}
 
+	//Initiate token data
 	claims := MyClaims{
 		StandardClaims: jwt.StandardClaims{
 			Issuer:    APPLICATION_NAME,
@@ -70,17 +70,20 @@ func HandlerLogin(w http.ResponseWriter, r *http.Request) {
 		Group:    userInfo["group"].(string),
 	}
 
+	//Encrypt token
 	token := jwt.NewWithClaims(
 		JWT_SIGNING_METHOD,
 		claims,
 	)
 
+	//Generate token JWT
 	signedToken, err := token.SignedString(JWT_SIGNATURE_KEY)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
+	//Return Token yang telah di generate
 	tokenString, _ := json.Marshal(M{"token": signedToken})
 	w.Write([]byte(tokenString))
 }
@@ -96,10 +99,12 @@ func authenticateUser(username, password string) (bool, M) {
 		return false, nil
 	}
 
+	// Parsing JSON data
 	res := gubrak.From(data).Find(func(each M) bool {
 		return each["username"] == username && each["password"] == password
 	}).Result()
 
+	// setelah data berhasil di dapatkan, maka remove password agar tidak ter expose
 	if res != nil {
 		resM := res.(M)
 		delete(resM, "password")
@@ -110,6 +115,7 @@ func authenticateUser(username, password string) (bool, M) {
 }
 
 func HandlerIndex(w http.ResponseWriter, r *http.Request) {
+	//Ambil user data dari context yang sedang berjalan/ data user yang telah login
 	userInfo := r.Context().Value("userInfo").(jwt.MapClaims)
 	message := fmt.Sprintf("hello %s (%s)", userInfo["Username"], userInfo["Group"])
 	w.Write([]byte(message))
